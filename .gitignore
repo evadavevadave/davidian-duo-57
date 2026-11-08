@@ -1,0 +1,21 @@
+# Build output (build.bat / Makefile)
+/build/
+
+# Compiler and linker by-products
+*.obj
+*.o
+*.lib
+*.exp
+*.pdb
+*.ilk
+*.dll
+*.so
+*.dylib
+*.exe
+
+# Test renders
+*.wav
+*.bmp
+
+# Reference material is kept outside the repository
+*.pdf
