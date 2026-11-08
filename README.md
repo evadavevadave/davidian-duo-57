@@ -1,6 +1,6 @@
 # Davidian Duo '57 — LV2 amp plugin
 
-A Davidian LV2 model of a classic 1957 tweed 2x12 combo, solved stage by stage from its service diagram (drawing 0064417000 rev A, `schematic.pdf`). It has four input jacks on Normal and Bright channels, a treble/bass tone stack, presence, and a 6L6GC push-pull power amp with rectifier sag. Mono in and out, no latency. Made with AI assistance; see [Use of AI](#use-of-ai).
+A Davidian LV2 model of a classic 1957 tweed 2x12 combo, solved stage by stage from its service diagram. It has four input jacks on Normal and Bright channels, a treble/bass tone stack, presence, and a 6L6GC push-pull power amp with rectifier sag. Mono in and out, no latency. Made with AI assistance; see [Use of AI](#use-of-ai).
 
 ## Build and test on Windows
 
@@ -128,7 +128,6 @@ Power-supply ripple isn't modelled, and the preamp supply doesn't sag with the p
 | `test/ui_check.c` | Hosts the built GUI and drives it with mouse messages (Windows only) |
 | `test/ui_render.c` | Renders the panel to a .bmp file |
 | `build.bat`, `Makefile` | Windows (MSVC) and gcc/clang builds |
-| `schematic.pdf` | The service diagram the model is built from. Reference only, not part of the bundle |
 | `LICENSE`, `LICENSE-LV2` | GPL-3.0 text, and the ISC notice for the re-declared LV2 interface |
 
 ## References
