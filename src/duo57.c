@@ -2,7 +2,7 @@
  * Copyright (C) 2026 Davidian */
 /*
  * Davidian Duo '57 — LV2 amplifier simulation derived from a 1957 tweed 2x12 combo service
- * diagram (drawing 0064417000 rev A, 05-MAR-04).
+ * diagram.
  *
  * Signal chain (component designators refer to the schematic):
  *
