@@ -195,6 +195,49 @@ int main(void)
         d->cleanup(h);
     }
 
+    /* Cabinet models: each is level-matched to the stock 2x12, and switching
+     * between them while playing must stay clean. */
+    {
+        static const char* names[CAB_COUNT] = { "off", "2x12 open", "1x12 open", "4x10 open",
+                                                "2x12 closed", "4x12 closed" };
+        double ref = 0.0;
+        for (int m = CAB_2X12_OPEN; m < CAB_COUNT; ++m) {
+            float ctl[P_COUNT] = { 0 };
+            ctl[P_INPUT] = IN_BRIGHT1; ctl[P_VOL_NORMAL] = 1; ctl[P_VOL_BRIGHT] = 5;
+            ctl[P_TREBLE] = 7; ctl[P_BASS] = 5; ctl[P_PRESENCE] = 6; ctl[P_CAB] = (float)m;
+            LV2_Handle h = open_plugin(d, ctl, in, out);
+            d->run(h, N);
+            double sum = 0.0;
+            for (int i = 0; i < N; ++i) sum += (double)out[i] * out[i];
+            double db = 10.0 * log10(sum / N + 1e-30);
+            if (m == CAB_2X12_OPEN) ref = db;
+            int ok = isfinite(db) && fabs(db - ref) < 3.0;
+            printf("cabinet %-12s rms %6.1f dBFS (%+.1f dB vs stock)  %s\n", names[m], db, db - ref,
+                   ok ? "ok" : "LEVEL MISMATCH");
+            if (!ok) fail = 1;
+            char path[64];
+            snprintf(path, sizeof path, "test_cab%d.wav", m);
+            write_wav(path, out, N);
+            d->cleanup(h);
+        }
+
+        float ctl[P_COUNT] = { 0 };
+        ctl[P_INPUT] = IN_BRIGHT1; ctl[P_VOL_BRIGHT] = 8; ctl[P_VOL_NORMAL] = 1;
+        ctl[P_TREBLE] = 7; ctl[P_BASS] = 6; ctl[P_PRESENCE] = 6;
+        LV2_Handle h = open_plugin(d, ctl, in, out);
+        int bad = 0;
+        for (int i = 0; i < N; i += 384) {
+            ctl[P_CAB] = (float)((i / 384) % CAB_COUNT);
+            d->connect_port(h, P_IN, in + i);
+            d->connect_port(h, P_OUT, out + i);
+            d->run(h, N - i < 384 ? N - i : 384);
+        }
+        for (int i = 0; i < N; ++i) if (!isfinite(out[i]) || fabs(out[i]) > 4.0) bad = 1;
+        printf("cabinet switching: %s\n", bad ? "FAIL" : "ok");
+        if (bad) fail = 1;
+        d->cleanup(h);
+    }
+
     /* Silence must stay silent (no self-oscillation in the feedback loops). */
     {
         float ctl[P_COUNT] = { 0 };

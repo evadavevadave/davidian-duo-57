@@ -1,0 +1,81 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Davidian
+# Builds and tests the plugin on Windows, Linux and macOS on every push. Pushing a
+# version tag (v*) also publishes the three ready-built bundles as a GitHub Release.
+name: Build
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and test (MSVC)
+        shell: cmd
+        run: build.bat test
+      - name: Package
+        shell: pwsh
+        run: Compress-Archive -Path build/duo57.lv2 -DestinationPath build/duo57-windows-x64.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: duo57-windows-x64
+          path: build/duo57-windows-x64.zip
+
+  linux:
+    # The oldest supported runner, so the bundle runs on older glibc versions too.
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install X11 headers
+        run: sudo apt-get update && sudo apt-get install -y libx11-dev zip
+      - name: Build and test
+        run: make && make test && make dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: duo57-linux-x86_64
+          path: build/duo57-linux-x86_64.zip
+
+  macos:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and test (universal x86_64 + arm64)
+        run: make && make test && make dist
+      - name: Check architectures
+        run: lipo -info build/duo57.lv2/duo57.dylib build/duo57.lv2/duo57_ui.dylib
+      - uses: actions/upload-artifact@v4
+        with:
+          name: duo57-macos-universal
+          path: build/duo57-macos-universal.zip
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [windows, linux, macos]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.zip
+          body: |
+            Ready-built bundles of Davidian Duo '57. Unzip and copy the `duo57.lv2` folder into your LV2 folder:
+
+            - **Windows (64-bit):** `duo57-windows-x64.zip` → `%APPDATA%\LV2`
+            - **macOS (Intel and Apple silicon):** `duo57-macos-universal.zip` → `~/Library/Audio/Plug-Ins/LV2`
+            - **Linux (x86_64):** `duo57-linux-x86_64.zip` → `~/.lv2`
+
+            The macOS bundle isn't notarized; see the README for how to let macOS load it.

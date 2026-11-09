@@ -10,7 +10,7 @@
     a lv2:Plugin , lv2:AmplifierPlugin , lv2:SimulatorPlugin ;
     doap:name "Davidian Duo '57" ;
     doap:license <http://opensource.org/licenses/GPL-3.0> ;
-    rdfs:comment "Tweed tube amplifier simulation modeled on the service diagram of a 1957 tweed 2x12 combo: four-triode 12AX7 input section with Normal and Bright channels, V3 gain stage and cathode follower, tweed treble/bass tone stack, cathodyne phase inverter and 6L6GC push-pull power amp with presence-shaped negative feedback and rectifier sag. 4x oversampled." ;
+    rdfs:comment "Tweed tube amplifier simulation modeled on the service diagram of a 1957 tweed 2x12 combo: four-triode 12AX7 input section with Normal and Bright channels, V3 gain stage and cathode follower, tweed treble/bass tone stack, cathodyne phase inverter and 6L6GC push-pull power amp with presence-shaped negative feedback and rectifier sag. Five selectable speaker cabinet models. 4x oversampled." ;
     lv2:optionalFeature lv2:hardRTCapable ;
     lv2:port [
         a lv2:AudioPort , lv2:InputPort ;
@@ -80,11 +80,17 @@
         a lv2:InputPort , lv2:ControlPort ;
         lv2:index 8 ;
         lv2:symbol "cab" ;
-        lv2:name "Cabinet Sim" ;
+        lv2:name "Cabinet" ;
         lv2:default 1 ;
         lv2:minimum 0 ;
-        lv2:maximum 1 ;
-        lv2:portProperty lv2:toggled
+        lv2:maximum 5 ;
+        lv2:portProperty lv2:integer , lv2:enumeration ;
+        lv2:scalePoint [ rdfs:label "Off" ; rdf:value 0 ] ,
+                       [ rdfs:label "2x12 Open (stock)" ; rdf:value 1 ] ,
+                       [ rdfs:label "1x12 Open" ; rdf:value 2 ] ,
+                       [ rdfs:label "4x10 Open" ; rdf:value 3 ] ,
+                       [ rdfs:label "2x12 Closed" ; rdf:value 4 ] ,
+                       [ rdfs:label "4x12 Closed" ; rdf:value 5 ]
     ] , [
         a lv2:InputPort , lv2:ControlPort ;
         lv2:index 9 ;

@@ -194,10 +194,18 @@ int main(int argc, char** argv)
     check("clicking the Normal 1 jack selects it", last_port == P_INPUT && last_value == IN_NORMAL1);
     click(child, 120, 268);
     check("the Y cable button selects Bright 1 + Normal 1", last_port == P_INPUT && last_value == IN_BOTH);
-    click(child, 912, 160 - 18);
-    check("clicking the top of the cabinet switch turns it off", last_port == P_CAB && last_value == 0.0f);
-    click(child, 912, 160 + 18);
-    check("clicking the bottom turns it on", last_port == P_CAB && last_value == 1.0f);
+    /* Cabinet selector rows sit at y = 120 + 19 * value. */
+    click(child, 940, 120 + 19 * CAB_4X12_CLOSED);
+    check("clicking the 4X12 CLOSED row selects it", last_port == P_CAB && last_value == CAB_4X12_CLOSED);
+    click(child, 886, 120);
+    check("clicking the OFF lamp turns the cabinet off", last_port == P_CAB && last_value == CAB_OFF);
+    {
+        POINT pt = { 910, 120 };
+        ClientToScreen(child, &pt);
+        SendMessageA(child, WM_MOUSEWHEEL, MAKEWPARAM(0, (WORD)-WHEEL_DELTA), MAKELPARAM(pt.x, pt.y));
+        check("wheel down on the selector steps to the 2X12 OPEN row",
+              last_port == P_CAB && last_value == CAB_2X12_OPEN);
+    }
 
     drag(child, 983, 262, 90);
     snprintf(label, sizeof label, "dragging Output down 90 px sends %.1f dB", last_value);

@@ -24,4 +24,16 @@ typedef enum {
 
 enum { IN_NORMAL1 = 0, IN_NORMAL2, IN_BRIGHT1, IN_BRIGHT2, IN_BOTH };
 
+/* Cabinet port values. 0 and 1 keep their meaning from the old on/off switch,
+ * so sessions saved with it load unchanged. */
+enum {
+    CAB_OFF = 0,
+    CAB_2X12_OPEN,    /* the amp's own speakers (default) */
+    CAB_1X12_OPEN,
+    CAB_4X10_OPEN,
+    CAB_2X12_CLOSED,
+    CAB_4X12_CLOSED,
+    CAB_COUNT
+};
+
 #endif

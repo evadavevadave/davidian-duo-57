@@ -9,7 +9,7 @@
     lv2:binary <duo57@LIB_EXT@> ;
     rdfs:seeAlso <duo57.ttl> .
 
-# UI-BEGIN (the Makefile removes this block on platforms without a window layer)
+# The build fills in the library extension and the GUI class (WindowsUI, CocoaUI or X11UI).
 <urn:davidian:duo-57>
     ui:ui <urn:davidian:duo-57#ui> .
 
@@ -19,4 +19,3 @@
     lv2:requiredFeature ui:parent ;
     lv2:optionalFeature ui:resize , ui:idleInterface ;
     lv2:extensionData ui:idleInterface .
-# UI-END

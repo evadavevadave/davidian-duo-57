@@ -24,6 +24,8 @@ rem The GUI: a Win32 window drawn by its own software renderer. /MT so hosts nee
 cl /nologo /std:c11 /O2 /MT /W4 /LD src\ui\ui_lv2.c /Fobuild\ /Fe:build\duo57.lv2\duo57_ui.dll /link /NOIMPLIB /NOEXP user32.lib gdi32.lib || exit /b 1
 
 copy /y duo57.lv2\duo57.ttl build\duo57.lv2\ >nul
+copy /y LICENSE build\duo57.lv2\ >nul
+copy /y LICENSE-LV2 build\duo57.lv2\ >nul
 powershell -NoProfile -Command "(Get-Content duo57.lv2\manifest.ttl.in) -replace '@LIB_EXT@','.dll' -replace '@UI_CLASS@','WindowsUI' | Set-Content -Encoding ascii build\duo57.lv2\manifest.ttl"
 
 if "%1"=="test" (

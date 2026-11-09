@@ -1,6 +1,18 @@
 # Davidian Duo '57 — LV2 amp plugin
 
-A Davidian LV2 model of a classic 1957 tweed 2x12 combo, solved stage by stage from its service diagram. It has four input jacks on Normal and Bright channels, a treble/bass tone stack, presence, and a 6L6GC push-pull power amp with rectifier sag. Mono in and out, no latency. Made with AI assistance; see [Use of AI](#use-of-ai).
+A Davidian LV2 model of a classic 1957 tweed 2x12 combo, solved stage by stage from its service diagram. It has four input jacks on Normal and Bright channels, a treble/bass tone stack, presence, a 6L6GC push-pull power amp with rectifier sag, and five speaker cabinet models. Mono in and out, no latency. Ready-built for Windows, macOS and Linux. Made with AI assistance; see [Use of AI](#use-of-ai).
+
+## Download
+
+Ready-built bundles are on the [Releases page](https://github.com/evadavevadave/davidian-duo-57/releases/latest):
+
+| System | File | Contents |
+|---|---|---|
+| Windows 10/11, 64-bit | `duo57-windows-x64.zip` | `duo57.dll`, `duo57_ui.dll` (Win32 GUI) |
+| macOS 10.13 or later, Intel and Apple silicon | `duo57-macos-universal.zip` | `duo57.dylib`, `duo57_ui.dylib` (Cocoa GUI) |
+| Linux, x86_64 | `duo57-linux-x86_64.zip` | `duo57.so`, `duo57_ui.so` (X11 GUI) |
+
+Each zip holds one `duo57.lv2` folder with the two .ttl files and the licences. GitHub Actions builds them from this repository's source (`.github/workflows/build.yml`) and runs the tests on each system before publishing. Unzip, then follow [Install](#install).
 
 ## Build and test on Windows
 
@@ -10,13 +22,13 @@ build.bat test
 
 `build.bat` needs Visual Studio's C++ tools and finds them with `vswhere`. Without `test` it builds only the bundle. With `test` it also builds and runs three test programs in `build\`:
 
-- `render.exe` checks the plugin against the schematic's test-point voltages and its rated power. It renders a synthetic chord through five settings to `build\test_*.wav`, and checks for NaN, glitches when switching input jacks, and stability of the feedback loops.
+- `render.exe` checks the plugin against the schematic's test-point voltages and its rated power. It renders a synthetic chord through five settings and through each cabinet to `build\test_*.wav`. It checks that the cabinets are level-matched, and checks for NaN, glitches when switching input jacks or cabinets, and stability of the feedback loops.
 - `ui_render.exe panel.bmp` renders the panel to an image without opening a window.
 - `ui_check.exe duo57.lv2 window.bmp` loads the GUI the way a Windows host does and drives it with mouse messages.
 
 ## Install
 
-Copy the whole `build\duo57.lv2` folder (`duo57.dll`, `duo57_ui.dll` and the two .ttl files) into one of the standard LV2 folders:
+Copy the whole `duo57.lv2` folder, from a downloaded zip or from `build/` after building, into one of the standard LV2 folders:
 
 - Windows: `%APPDATA%\LV2` (current user) or `%COMMONPROGRAMFILES%\LV2` (all users)
 - Linux: `~/.lv2` (current user) or `/usr/local/lib/lv2` (all users)
@@ -26,25 +38,43 @@ If your host doesn't scan that folder, add it to the host's LV2 search path or s
 
 Look for **Davidian Duo '57** in your host's plugin list. The plugin URI is `urn:davidian:duo-57`.
 
-## Other platforms
+**macOS:** the bundle isn't signed with a developer certificate or notarized, so macOS quarantines it after download and hosts may refuse to load it. Clear the quarantine flag once after copying:
 
+```bash
+xattr -dr com.apple.quarantine ~/Library/Audio/Plug-Ins/LV2/duo57.lv2
 ```
+
+## Build on macOS and Linux
+
+```bash
 make
+```
+
+```bash
 make test
+```
+
+```bash
 make install
 ```
 
-`make install` copies the bundle to `~/.lv2`. The libraries get the right name for each platform (`.dll`, `.so` or `.dylib`). The code is plain C and needs no LV2 SDK. The Linux GUI needs the X11 development headers (`libx11-dev`). macOS has no window layer yet, so the Makefile leaves the GUI out there and hosts show generic controls. Only the Windows build has been compiled and tested.
+`make install` copies the bundle to `~/.lv2` (set `LV2DIR` for another folder; on macOS use `LV2DIR=~/Library/Audio/Plug-Ins/LV2`). `make dist` zips the bundle for release. The libraries get the right name for each system (`.so` or `.dylib`). The code is plain C, plus a small Objective-C window layer on macOS, and needs no LV2 SDK.
+
+- **Linux:** needs a C compiler and the X11 development headers (`libx11-dev`).
+- **macOS:** needs the Xcode command-line tools. Builds are universal (Intel and Apple silicon) by default; `make ARCH=` builds for this Mac's architecture only.
+- **MinGW** (Windows with gcc) also works through the Makefile.
+
+The GitHub Actions workflow builds and tests on Windows (MSVC), Ubuntu 22.04 and macOS 14 on every push. The GUI host test (`ui_check`) is Windows-only; the macOS and Linux GUIs are checked by compiling them and rendering the shared panel code, not by opening a window.
 
 ## GUI
 
 ![Duo '57 panel](docs/gui.png)
 
-The bundle includes a native GUI (`duo57_ui.dll`) in the house style: graphite panel, cream lettering, amber accents, black knurled knobs and outlined section boxes. `src/ui/style.h`, `font.h` and `canvas.h` are copied unchanged from the Bi-Lumen. The GUI draws with its own software renderer into a Win32 window (`ui:WindowsUI`) or an X11 window (`ui:X11UI` on Linux), so it needs no graphics libraries.
+The bundle includes a native GUI in the house style: graphite panel, cream lettering, amber accents, black knurled knobs and outlined section boxes. `src/ui/style.h`, `font.h` and `canvas.h` are copied unchanged from the Bi-Lumen. The GUI draws every pixel with its own software renderer, shared by all three systems, and hands the result to a thin window layer: Win32 on Windows (`ui:WindowsUI`), Cocoa on macOS (`ui:CocoaUI`) and X11 on Linux (`ui:X11UI`). It needs no graphics libraries.
 
 - **Input jacks:** click a jack to plug into it, and it lights amber. The Y CABLE button feeds Bright 1 and Normal 1 together, and both jacks light.
 - **Knobs:** drag up or down. Hold Shift for fine control, use the mouse wheel for small steps, and double-click to reset. Volume, Treble, Bass and Presence carry a 1–12 scale, as on a tweed amp.
-- **Cabinet switch:** click the upper half for off, the lower half for on.
+- **Cabinet selector:** click a row to choose it, or use the mouse wheel over the list. The lit amber lamp is the current choice.
 - **Pilot light:** the red jewel is decoration and always lit.
 - **Readout:** the window at the top right shows the control you last touched and its value.
 
@@ -59,9 +89,21 @@ The panel name, Duo '57, is original. It refers to the two speakers and the mode
 | Treble | 1–12 | 7 | R26 1M "A", with C7 250p and C8 47p |
 | Bass | 1–12 | 5 | R30 1M "A", with C9 .01, C10 .0047 and R27/R28/R29 220k |
 | Presence | 1–12 | 6 | R31 5k + C11 .1µF on the V4-A cathode. Turning it up lifts the treble and reduces treble in the negative feedback |
-| Cabinet Sim | off/on | on | An approximate open-back 2x12 speaker filter. Not on the amp. Turn it off to use your own impulse response |
+| Cabinet | Off / 2x12 Open / 1x12 Open / 4x10 Open / 2x12 Closed / 4x12 Closed | 2x12 Open | Speaker cabinet filter, see [Cabinets](#cabinets). Not on the amp. Off leaves the speaker-terminal signal for your own impulse response |
 | Input Trim | -24 to +24 dB | 0 dB | 0 dBFS at the input counts as 1 V peak at the guitar jack |
 | Output Level | -60 to +12 dB | 0 dB | Not on the amp. It comes after the circuit and doesn't change the tone |
+
+### Cabinets
+
+| Cabinet | Character |
+|---|---|
+| 2x12 Open | The amp's own speakers: open back, alnico magnets. Loose bass, a gentle mid scoop and a soft top. The default |
+| 1x12 Open | A single 12" in an open-back cab. Less low end and more forward upper mids |
+| 4x10 Open | Four 10" in an open-back cab. Deep but loose bass with a softer, earlier top roll-off |
+| 2x12 Closed | The same two 12" in a sealed box. Tighter bass with a box thump around 100 Hz |
+| 4x12 Closed | A sealed 4x12 with ceramic speakers. The biggest low end, a deeper mid scoop and a bright break-up peak |
+
+Each cabinet is level-matched to the stock 2x12 over 100 Hz–5 kHz, so switching changes the tone rather than the volume; `render.exe` checks they stay within 3 dB (they measure within 0.6 dB). Switching crossfades over 20 ms, so it doesn't click. The Cabinet port's values 0 and 1 mean the same as the old on/off switch, so sessions saved with it load unchanged.
 
 ## How the model works
 
@@ -99,7 +141,7 @@ The schematic doesn't settle these, so they are judgment calls. Tune them by ear
 - **Jack switching:** the scan's jack drawing alone suggests that Input 1 drives only one triode. But a single 12AX7 cannot reach the TP14 gain of 48.8× with this load. With both triodes driven, the model gives about 55×. So Input 1 is modelled as driving both triodes, and Input 2 as driving one, with the other grid grounded.
 - **Volume taper:** the volume pots are marked "SPL. D", which doesn't say what law they follow. A linear law reproduces the TP14 → TP15 ratio at 50% rotation, so that is what is used. Treble and bass use a standard audio taper.
 - **Power-amp constants:** the 6L6GC curve, output-transformer saturation and sag depth.
-- **Cabinet filter:** shaped by ear as an open-back 2x12, not from a measured speaker.
+- **Cabinet filters:** all five are shaped by ear from the usual character of each cabinet type, not from measured speakers or impulse responses. Their curves are in the `CABS` table in `src/duo57.c`.
 
 ## Simplifications
 
@@ -109,7 +151,7 @@ These parts are behavioural models, not a component-level circuit solution:
 - the 6L6GC, which uses a 3/2-power law
 - output-transformer saturation
 - rectifier sag
-- the cabinet filter
+- the cabinet filters, which are six-band EQ curves rather than speaker models: they don't model cone break-up distortion, mic position or room
 
 Power-supply ripple isn't modelled, and the preamp supply doesn't sag with the power amp.
 
@@ -117,17 +159,19 @@ Power-supply ripple isn't modelled, and the preamp supply doesn't sag with the p
 
 | File | Contents |
 |---|---|
-| `src/duo57.c` | DSP and LV2 entry points |
-| `src/ports.h` | Port numbers and URIs shared by the plugin and the GUI |
+| `src/duo57.c` | DSP, cabinet models and LV2 entry points |
+| `src/ports.h` | Port numbers, cabinet numbers and URIs shared by the plugin and the GUI |
 | `src/lv2_core.h` | The LV2 C interface, so no SDK is needed. Build with `-DHAVE_LV2` to use the system headers instead |
 | `src/ui/panel.h` | GUI layout, drawing and mouse handling, with no platform code |
 | `src/ui/style.h`, `canvas.h`, `font.h` | House style, software renderer and stroke font |
 | `src/ui/ui_lv2.c` | LV2 UI entry points and the Win32 and X11 window layers |
+| `src/ui/window_cocoa.h` | The macOS (Cocoa) window layer, in Objective-C |
 | `duo57.lv2/` | LV2 metadata. The build fills in the library extension and GUI type in `manifest.ttl.in` |
 | `test/render.c` | Test-point calibration, power, rendered WAVs, NaN, jack-switching and stability checks |
 | `test/ui_check.c` | Hosts the built GUI and drives it with mouse messages (Windows only) |
 | `test/ui_render.c` | Renders the panel to a .bmp file |
-| `build.bat`, `Makefile` | Windows (MSVC) and gcc/clang builds |
+| `build.bat`, `Makefile` | Windows (MSVC) build, and the macOS, Linux and MinGW build |
+| `.github/workflows/build.yml` | Builds and tests on all three systems, and publishes releases from version tags |
 | `LICENSE`, `LICENSE-LV2` | GPL-3.0 text, and the ISC notice for the re-declared LV2 interface |
 
 ## References
@@ -147,13 +191,15 @@ This project was made with AI assistance. The code, tests, LV2 metadata, build s
 - **The AI**:
   - read component values and topology from the scanned schematic and chose the estimates listed under [Estimates](#estimates)
   - wrote the DSP model and calibrated it against the schematic's test points
-  - adapted the house-style GUI to this panel
-  - wrote the test programs and documentation
+  - designed the five cabinet curves
+  - adapted the house-style GUI to this panel and wrote the macOS window layer
+  - wrote the test programs, the build scripts and CI workflow, and the documentation
 - **Checking:** the results are checked by the automated tests described above:
   - test-point levels and power against the schematic
-  - numerical stability, jack switching and speed
-  - the GUI loaded and driven by simulated mouse input
-- **Not checked:** the sound hasn't been compared with a real amplifier, and the plugin hasn't been tried in a host yet. The values under [Estimates](#estimates) should be tuned by ear.
+  - numerical stability, jack and cabinet switching, cabinet levels and speed
+  - the GUI loaded and driven by simulated mouse input (Windows)
+  - builds and DSP tests on Windows, macOS and Linux in CI
+- **Not checked:** the sound hasn't been compared with a real amplifier, and the plugin hasn't been tried in a host yet. The macOS and Linux GUIs compile but haven't been opened in a host. The values under [Estimates](#estimates) should be tuned by ear.
 
 ## License
 
@@ -168,6 +214,8 @@ This program is free software: you can redistribute it and/or modify it under th
 | LV2 C interface (`lv2/core/lv2.h`, `lv2/ui/ui.h`) | ISC | Its declarations are re-stated in `src/lv2_core.h`, the UI ABI block of `src/ui/ui_lv2.c` and `test/ui_check.c`, so no LV2 SDK is needed. Copyright and permission notice in [LICENSE-LV2](LICENSE-LV2). |
 | LV2 vocabularies (`lv2core`, `ui`, `units`) | ISC | The `.ttl` files refer to them by URI. Nothing is copied. |
 | Microsoft C runtime | Visual Studio licence | `build.bat` links it statically (`/MT`) into the DLLs you build. It counts as a system library under the GPL, so this is allowed. No binaries are committed to this repository. |
+| Apple Cocoa, Core Graphics; X11 (libX11) | System libraries | The macOS and Linux GUIs link them dynamically. Nothing is copied. |
+| GitHub Actions (`actions/checkout`, `upload-artifact`, `download-artifact`, `softprops/action-gh-release`) | MIT | Used only by the CI workflow to build and publish releases. Not part of the plugin. |
 
 Every source file starts with an SPDX licence line saying which of these applies.
 

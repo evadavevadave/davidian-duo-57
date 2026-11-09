@@ -658,6 +658,89 @@ static double power_run(PowerAmp* p, double u)
     return y;
 }
 
+/* --------------------------------------------------------- cabinets */
+
+/* Speaker cabinet models: six biquads each (high-pass for the cabinet's low
+ * cut-off, a bass resonance peak, a lower-mid dip, a cone break-up peak and two
+ * low-passes for the cone's top end). They are approximations shaped by ear, not
+ * measured responses. Each model is normalised to the stock 2x12's loudness over
+ * the guitar band, so switching changes the tone, not the level. */
+
+#define CAB_STAGES 6
+#define CAB_XFADE  0.02   /* seconds */
+
+typedef struct {
+    double hp_f, hp_q;     /* low cut-off */
+    double lo_f, lo_q, lo_g; /* bass resonance */
+    double mid_f, mid_q, mid_g; /* lower-mid dip */
+    double hi_f, hi_q, hi_g; /* cone break-up */
+    double lp1_f, lp1_q, lp2_f;
+} CabSpec;
+
+/* Indexed by the Cabinet port value; 0 is Off. */
+static const CabSpec CABS[CAB_COUNT] = {
+    { 0 },
+    /* 2x12 open back, alnico: the amp's own speakers */
+    { 80.0, 0.70, 120.0, 1.2, 2.5, 500.0, 0.9, -2.5, 2300.0, 1.4, 4.0, 5500.0, 0.60, 8000.0 },
+    /* 1x12 open back: less low end, more forward upper mids */
+    { 105.0, 0.80, 140.0, 1.3, 2.0, 600.0, 1.0, -1.5, 2600.0, 1.6, 5.0, 5000.0, 0.65, 7500.0 },
+    /* 4x10 open back: deep and loose, softer top */
+    { 65.0, 0.75, 105.0, 1.1, 3.5, 450.0, 0.8, -2.0, 1800.0, 1.2, 3.0, 4800.0, 0.70, 7000.0 },
+    /* 2x12 closed back: tighter, with a box thump */
+    { 75.0, 0.90, 100.0, 1.5, 4.0, 450.0, 1.0, -3.0, 2500.0, 1.5, 3.5, 5000.0, 0.60, 7500.0 },
+    /* 4x12 closed back, ceramic: big low end, scooped, bright break-up */
+    { 70.0, 1.00, 95.0, 1.6, 5.0, 400.0, 0.9, -4.0, 2000.0, 1.8, 5.0, 4800.0, 0.70, 6500.0 },
+};
+
+typedef struct {
+    Biquad b[CAB_STAGES];
+    double gain;
+} CabBank;
+
+static void cab_design(CabBank* k, int model, double fs)
+{
+    const CabSpec* c = &CABS[model];
+    for (int i = 0; i < CAB_STAGES; ++i) {
+        k->b[i].b0 = 1.0;
+        k->b[i].b1 = k->b[i].b2 = k->b[i].a1 = k->b[i].a2 = 0.0;
+        k->b[i].z1 = k->b[i].z2 = 0.0;
+    }
+    k->gain = 1.0;
+    if (model <= CAB_OFF) return;
+    bq_highpass(&k->b[0], c->hp_f, c->hp_q, fs);
+    bq_peak(&k->b[1], c->lo_f, c->lo_q, c->lo_g, fs);
+    bq_peak(&k->b[2], c->mid_f, c->mid_q, c->mid_g, fs);
+    bq_peak(&k->b[3], c->hi_f, c->hi_q, c->hi_g, fs);
+    bq_lowpass(&k->b[4], fmin(c->lp1_f, 0.45 * fs), c->lp1_q, fs);
+    bq_lowpass(&k->b[5], fmin(c->lp2_f, 0.45 * fs), 0.707, fs);
+}
+
+/* Mean power gain of a bank over 100 Hz - 5 kHz, log-spaced. */
+static double cab_band_power(const CabBank* k, double fs)
+{
+    double sum = 0.0;
+    const int N = 48;
+    for (int j = 0; j < N; ++j) {
+        double f = 100.0 * pow(50.0, j / (double)(N - 1));
+        double w = 2.0 * M_PI * f / fs, cr = cos(w), ci = -sin(w), c2r = cos(2 * w), c2i = -sin(2 * w);
+        double p = 1.0;
+        for (int i = 0; i < CAB_STAGES; ++i) {
+            const Biquad* q = &k->b[i];
+            double nr = q->b0 + q->b1 * cr + q->b2 * c2r, ni = q->b1 * ci + q->b2 * c2i;
+            double dr = 1.0 + q->a1 * cr + q->a2 * c2r, di = q->a1 * ci + q->a2 * c2i;
+            p *= (nr * nr + ni * ni) / (dr * dr + di * di);
+        }
+        sum += p;
+    }
+    return sum / N;
+}
+
+static inline double cab_run(CabBank* k, double x)
+{
+    for (int i = 0; i < CAB_STAGES; ++i) x = bq_run(&k->b[i], x);
+    return x * k->gain;
+}
+
 /* ----------------------------------------------------------- plugin */
 
 typedef struct {
@@ -685,7 +768,12 @@ typedef struct {
     ToneStack ts;
     PowerAmp  pa;
 
-    Biquad cab[6];
+    CabBank cab[2];         /* [cab_cur] is playing; the other fades out */
+    double  cab_norm[CAB_COUNT];
+    int     cab_model;      /* model in cab[cab_cur], or -1 before the first block */
+    int     cab_cur;
+    int     cab_fade;       /* samples left in a crossfade */
+    int     cab_fade_len;
 
     double sm_vn, sm_vb, sm_in, sm_out;
     double sm_coef;
@@ -751,13 +839,21 @@ static LV2_Handle instantiate(const LV2_Descriptor* desc, double rate,
     power_set_presence(&s->pa, 0.5, fso);
     s->last_pres = -1.0;
 
-    /* Cabinet: open-back 2x12 alnico, approximate, at base rate. */
-    bq_highpass(&s->cab[0], 80.0, 0.7, rate);
-    bq_peak(&s->cab[1], 120.0, 1.2, 2.5, rate);
-    bq_peak(&s->cab[2], 500.0, 0.9, -2.5, rate);
-    bq_peak(&s->cab[3], 2300.0, 1.4, 4.0, rate);
-    bq_lowpass(&s->cab[4], fmin(5500.0, 0.45 * rate), 0.6, rate);
-    bq_lowpass(&s->cab[5], fmin(8000.0, 0.45 * rate), 0.707, rate);
+    /* Cabinets run at the base rate. Level-match every model to the stock 2x12;
+     * Off stays at unity, as before. */
+    {
+        CabBank k;
+        double ref;
+        cab_design(&k, CAB_2X12_OPEN, rate);
+        ref = cab_band_power(&k, rate);
+        s->cab_norm[CAB_OFF] = 1.0;
+        for (int m = CAB_OFF + 1; m < CAB_COUNT; ++m) {
+            cab_design(&k, m, rate);
+            s->cab_norm[m] = sqrt(ref / cab_band_power(&k, rate));
+        }
+    }
+    s->cab_fade_len = (int)(CAB_XFADE * rate) + 1;
+    s->cab_model = -1;
 
     s->sm_coef = 1.0 - exp(-1.0 / (0.015 * rate));
     s->input   = -1;
@@ -782,7 +878,8 @@ static void reset_state(Duo57* s)
         s->up[k].z1 = s->up[k].z2 = 0.0;
         s->down[k].z1 = s->down[k].z2 = 0.0;
     }
-    for (int k = 0; k < 6; ++k) s->cab[k].z1 = s->cab[k].z2 = 0.0;
+    s->cab_model = -1; /* redesigned, with clear state, at the next block */
+    s->cab_fade = 0;
     s->cath_n.s = s->cath_b.s = 0.0;
     s->input = -1;
     OnePole* op[] = { &s->in_hp, &s->cn_hp, &s->cb_hp, &s->bright, &s->miller,
@@ -909,7 +1006,23 @@ static void run(LV2_Handle h, uint32_t n)
     double vb_t  = taper_volume(knob01(port_val(s, P_VOL_BRIGHT, 6.0)));
     double in_t  = pow(10.0, clampd(port_val(s, P_IN_TRIM, 0.0), -24.0, 24.0) / 20.0);
     double out_t = pow(10.0, clampd(port_val(s, P_OUT_LEVEL, 0.0), -60.0, 12.0) / 20.0);
-    int    cab   = port_val(s, P_CAB, 1.0) > 0.5;
+    int    cab   = (int)lrint(clampd(port_val(s, P_CAB, CAB_2X12_OPEN), 0.0, CAB_COUNT - 1));
+
+    if (cab != s->cab_model) {
+        if (s->cab_model < 0) {
+            /* first block after activate: no fade */
+            cab_design(&s->cab[s->cab_cur], cab, s->fs);
+            s->cab[s->cab_cur].gain = s->cab_norm[cab];
+            s->cab_fade = 0;
+        } else {
+            /* the playing bank fades out while the new one fades in */
+            s->cab_cur ^= 1;
+            cab_design(&s->cab[s->cab_cur], cab, s->fs);
+            s->cab[s->cab_cur].gain = s->cab_norm[cab];
+            s->cab_fade = s->cab_fade_len;
+        }
+        s->cab_model = cab;
+    }
 
     if (!s->primed) {
         s->sm_vn = vn_t; s->sm_vb = vb_t; s->sm_in = in_t; s->sm_out = out_t;
@@ -969,8 +1082,15 @@ static void run(LV2_Handle h, uint32_t n)
 
         /* speaker volts -> digital: full power (~17 V peak) is about -4 dBFS */
         double y = acc * 0.035;
-        if (cab) {
-            for (int k = 0; k < 6; ++k) y = bq_run(&s->cab[k], y);
+        {
+            double yc = cab_run(&s->cab[s->cab_cur], y);
+            if (s->cab_fade > 0) {
+                double t = (double)s->cab_fade / s->cab_fade_len; /* 1 -> 0 */
+                double yo = cab_run(&s->cab[s->cab_cur ^ 1], y);
+                yc = yc * (1.0 - t) + yo * t;
+                --s->cab_fade;
+            }
+            y = yc;
         }
         y *= s->sm_out;
         if (!(y == y) || fabs(y) > 1e6) { reset_state(s); y = 0.0; }

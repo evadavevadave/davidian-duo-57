@@ -3,8 +3,9 @@
  * The LV2 interface declarations in this file follow the ISC-licensed LV2 headers;
  * see LICENSE-LV2 for their copyright and permission notice. */
 /* LV2 GUI for the Davidian Duo '57 amp: the LV2 UI entry points plus a thin window layer
- * for Win32 (ui:WindowsUI) and X11 (ui:X11UI). Everything else is in panel.h, which knows
- * nothing about windows. The UI ABI is declared here so no LV2 SDK is needed. */
+ * for Win32 (ui:WindowsUI), macOS (ui:CocoaUI, in window_cocoa.h) and X11 (ui:X11UI).
+ * Everything else is in panel.h, which knows nothing about windows. The UI ABI is
+ * declared here so no LV2 SDK is needed. */
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -193,8 +194,12 @@ static void ui_redraw(UI* ui)
 /* The window's own timer drives redraws, so idle has nothing to do. */
 static int window_idle(UI* ui) { ui_redraw(ui); return 0; }
 
+/* ---- Window layer: macOS (Cocoa) ---- */
+#elif defined(__APPLE__)
+#    include "window_cocoa.h"
+
 /* ---- Window layer: X11 ---- */
-#elif defined(__unix__) && !defined(__APPLE__)
+#elif defined(__unix__)
 #    include <X11/Xlib.h>
 #    include <X11/Xutil.h>
 
@@ -321,7 +326,7 @@ static int window_idle(UI* ui)
 }
 
 #else
-#    error "No window layer for this platform yet (Windows and X11 are supported)."
+#    error "No window layer for this platform (Windows, macOS and X11 are supported)."
 #endif
 
 /* ---- LV2 UI entry points ---- */

@@ -47,6 +47,7 @@ int main(int argc, char** argv)
     panel_set(&p, P_BASS, 5.0f);
     panel_set(&p, P_PRESENCE, 9.0f);
     panel_set(&p, P_IN_TRIM, -3.0f);
+    panel_set(&p, P_CAB, CAB_2X12_OPEN);
     p.shown = 5; /* VOLUME BRIGHT */
     panel_draw(&p);
     if (!write_bmp(argv[1], p.px, PANEL_W, PANEL_H)) {

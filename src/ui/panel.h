@@ -21,7 +21,7 @@
 #define PANEL_W 1040
 #define PANEL_H 330
 
-enum { W_KNOB, W_TRIM, W_SWITCH, W_JACK, W_YBTN };
+enum { W_KNOB, W_TRIM, W_SELECT, W_JACK, W_YBTN };
 
 typedef struct {
     int kind, port;
@@ -29,7 +29,7 @@ typedef struct {
     float min, max, def; /* for W_JACK / W_YBTN, def is the value the jack selects */
     const char* label;   /* on the panel */
     const char* name;    /* in the display */
-    const char* opts[2];
+    const char* opts[6];  /* W_SELECT rows */
     int nopts;
 } Widget;
 
@@ -52,7 +52,9 @@ static const Widget WIDGETS[] = {
     { W_KNOB, P_BASS, 661, KNOB_Y, 30, 1, 12, 5, "BASS", "BASS", {0}, 0 },
     { W_KNOB, P_PRESENCE, 784, KNOB_Y, 30, 1, 12, 6, "PRESENCE", "PRESENCE", {0}, 0 },
 
-    { W_SWITCH, P_CAB, 912, 160, 0, 0, 1, 1, "CABINET", "CABINET SIM", { "OFF", "ON" }, 2 },
+    /* Cabinet selector: x is the lamp column, y the first row, r the row pitch. */
+    { W_SELECT, P_CAB, 886, 120, 19, 0, CAB_COUNT - 1, CAB_2X12_OPEN, "CABINET", "CABINET",
+      { "OFF", "2X12 OPEN", "1X12 OPEN", "4X10 OPEN", "2X12 CLOSED", "4X12 CLOSED" }, CAB_COUNT },
     { W_TRIM, P_IN_TRIM, 893, 262, 17, -24, 24, 0, "INPUT", "INPUT TRIM", {0}, 0 },
     { W_TRIM, P_OUT_LEVEL, 983, 262, 17, -60, 12, 0, "OUTPUT", "OUTPUT LEVEL", {0}, 0 },
 };
@@ -120,7 +122,7 @@ static void w_format(const Panel* p, const Widget* w, char* buf, size_t n)
     switch (w->kind) {
     case W_JACK:
     case W_YBTN: snprintf(buf, n, "%s", INPUTS[input_sel(p)]); break;
-    case W_SWITCH: snprintf(buf, n, "%s", w->opts[switch_index(p, w)]); break;
+    case W_SELECT: snprintf(buf, n, "%s", w->opts[switch_index(p, w)]); break;
     case W_TRIM: snprintf(buf, n, "%+.1f DB", v); break;
     default: snprintf(buf, n, "%.1f", v); break;
     }
@@ -178,15 +180,16 @@ static void draw_knob_scale(Canvas* c, const Widget* w)
         text_center(c, w->x, w->y + w->r + 14.0f, w->label, 8.0f, 2.0f, 1.4f, COL_INK, 1);
 }
 
-static void draw_switch_static(Canvas* c, const Widget* w)
+/* Selector: a column of lamp bezels, one per row; the lit lamp is the choice. */
+static void draw_select_static(Canvas* c, const Widget* w)
 {
-    text_center(c, w->x + 14, w->y - 44, w->label, 8, 2.0f, 1.4f, COL_INK, 1);
-    /* Mounting plate and nut. */
-    cv_rrect(c, w->x - 9, w->y - 25, w->x + 9, w->y + 25, 4, 0x000000, 0.35f);
-    cv_rrect_line(c, w->x - 9, w->y - 25, w->x + 9, w->y + 25, 4, 1, 0x71757d, 0.7f);
-    cv_circle(c, w->x + 1, w->y + 2, 8.5f, 0x000000, 0.5f);
-    cv_shaded_circle(c, w->x, w->y, 8.5f, COL_METAL_LIGHT, COL_METAL_DARK, -0.4f, -0.6f, 1);
-    cv_circle(c, w->x, w->y, 5, 0x2d2f33, 1);
+    int i;
+    text_draw(c, w->x - 6, w->y - 22, w->label, 8, 2.0f, 1.4f, COL_INK, 1);
+    for (i = 0; i < w->nopts; ++i) {
+        const float y = w->y + w->r * i;
+        cv_circle(c, w->x + 0.5f, y + 1, 5.5f, 0x000000, 0.5f);
+        cv_shaded_circle(c, w->x, y, 5.5f, COL_METAL_LIGHT, COL_METAL_DARK, -0.4f, -0.6f, 1);
+    }
 }
 
 /* Input jack: chrome nut around a black socket. */
@@ -263,7 +266,7 @@ static void draw_background(Panel* p)
         switch (w->kind) {
         case W_KNOB:
         case W_TRIM: draw_knob_scale(&c, w); break;
-        case W_SWITCH: draw_switch_static(&c, w); break;
+        case W_SELECT: draw_select_static(&c, w); break;
         case W_JACK:
             draw_jack_static(&c, w);
             text_center(&c, 111, w->y - 4.5f, w->label, 9, 1.0f, 1.4f, COL_DIM, 1);
@@ -301,19 +304,19 @@ static void draw_knob(Canvas* c, const Widget* w, float n, int active)
             cv_ay(y, r * 0.93f, ang), big ? 3.0f : 2.2f, COL_INK, 1);
 }
 
-static void draw_switch(Canvas* c, const Widget* w, int idx)
+static void draw_select(Canvas* c, const Widget* w, int idx)
 {
-    const float x = w->x, y = w->y;
-    const float ey = (idx == 0) ? y - 19.0f : y + 19.0f;
     int i;
     for (i = 0; i < w->nopts; ++i) {
-        const float oy = y - 20.0f + 40.0f * i;
-        text_draw(c, x + 15, oy - 3.5f, w->opts[i], 7, 1.6f, 1.25f, i == idx ? COL_AMBER : COL_DIM, 1);
+        const float y = w->y + w->r * i;
+        if (i == idx) {
+            cv_glow(c, w->x, y, 3.5f, 10, COL_AMBER, 0.4f);
+            cv_shaded_circle(c, w->x, y, 3.8f, 0xffe6b8, COL_AMBER, -0.3f, -0.4f, 1);
+        } else {
+            cv_shaded_circle(c, w->x, y, 3.8f, 0x4a3410, 0x1c1206, -0.3f, -0.4f, 1);
+        }
+        text_draw(c, w->x + 12, y - 3.5f, w->opts[i], 7, 1.6f, 1.25f, i == idx ? COL_AMBER : COL_DIM, 1);
     }
-    cv_line(c, x + 1.5f, y + 2, x + 1.5f, ey + 2, 6, 0x000000, 0.45f);
-    cv_line(c, x, y, x, ey, 5.5f, 0xb6b9bf, 1);
-    cv_line(c, x - 1.2f, y, x - 1.2f, ey, 1.6f, 0xf0f1f3, 0.7f);
-    cv_shaded_circle(c, x, ey, 4.8f, 0xf4f5f7, 0x7c7f86, -0.35f, -0.45f, 1);
 }
 
 /* Socket: empty is a dark hole; plugged shows a black plug sleeve with an amber ring. */
@@ -366,7 +369,7 @@ static void panel_draw(Panel* p)
         switch (w->kind) {
         case W_KNOB:
         case W_TRIM: draw_knob(&p->c, w, w_norm(w, p->val[w->port]), p->drag == i); break;
-        case W_SWITCH: draw_switch(&p->c, w, switch_index(p, w)); break;
+        case W_SELECT: draw_select(&p->c, w, switch_index(p, w)); break;
         case W_JACK: draw_jack(&p->c, w, jack_lit(p, w)); break;
         case W_YBTN: draw_ybtn(&p->c, w, jack_lit(p, w)); break;
         }
@@ -451,8 +454,8 @@ static int hit(float x, float y)
             if (dx * dx + dy * dy <= (w->r + 8) * (w->r + 8))
                 return i;
             break;
-        case W_SWITCH:
-            if (dx >= -14 && dx <= 50 && dy >= -30 && dy <= 30)
+        case W_SELECT:
+            if (dx >= -12 && dx <= 132 && dy >= -0.5f * w->r && dy <= (w->nopts - 0.5f) * w->r)
                 return i;
             break;
         case W_YBTN:
@@ -484,8 +487,8 @@ static void panel_mouse_down(Panel* p, float x, float y, int dbl)
         p->shown = i;
         p->dirty = 1;
         break;
-    case W_SWITCH:
-        set_value(p, i, y < w->y ? 0.0f : 1.0f);
+    case W_SELECT:
+        set_value(p, i, floorf((y - w->y) / w->r + 0.5f));
         break;
     case W_JACK:
     case W_YBTN:
@@ -523,8 +526,8 @@ static void panel_wheel(Panel* p, float x, float y, float steps, int fine)
     if (i < 0)
         return;
     w = &WIDGETS[i];
-    if (w->kind == W_SWITCH)
-        set_value(p, i, steps > 0 ? 0.0f : 1.0f);
+    if (w->kind == W_SELECT)
+        set_value(p, i, (float)(switch_index(p, w) + (steps > 0 ? -1 : 1)));
     else if (w->kind == W_KNOB || w->kind == W_TRIM)
         set_value(p, i, w_value(w, w_norm(w, p->val[w->port]) + steps * (fine ? 0.004f : 0.025f)));
 }
