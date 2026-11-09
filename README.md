@@ -64,7 +64,7 @@ make install
 - **macOS:** needs the Xcode command-line tools. Builds are universal (Intel and Apple silicon) by default; `make ARCH=` builds for this Mac's architecture only.
 - **MinGW** (Windows with gcc) also works through the Makefile.
 
-The GitHub Actions workflow builds and tests on Windows (MSVC), Ubuntu 22.04 and macOS 14 on every push. The GUI host test (`ui_check`) is Windows-only; the macOS and Linux GUIs are checked by compiling them and rendering the shared panel code, not by opening a window.
+The GitHub Actions workflow builds and tests on Windows (MSVC), Ubuntu 22.04 and the current macOS on every push. The GUI host test (`ui_check`) is Windows-only; the macOS and Linux GUIs are checked by compiling them and rendering the shared panel code, not by opening a window.
 
 ## GUI
 
