@@ -21,7 +21,7 @@ rem /MT links the C runtime statically, so hosts don't need a redistributable in
 cl /nologo /O2 /fp:fast /MT /W3 /LD src\duo57.c /Fobuild\ /Fe:build\duo57.lv2\duo57.dll /link /NOIMPLIB /NOEXP || exit /b 1
 
 rem The GUI: a Win32 window drawn by its own software renderer. /MT so hosts need no redistributable.
-cl /nologo /std:c11 /O2 /MT /W4 /LD src\ui\ui_lv2.c /Fobuild\ /Fe:build\duo57.lv2\duo57_ui.dll /link /NOIMPLIB /NOEXP user32.lib gdi32.lib || exit /b 1
+cl /nologo /std:c11 /O2 /MT /W4 /LD src\ui\ui_lv2.c src\ui\view.c /Fo"build\\" /Fe:build\duo57.lv2\duo57_ui.dll /link /NOIMPLIB /NOEXP user32.lib gdi32.lib || exit /b 1
 
 copy /y duo57.lv2\duo57.ttl build\duo57.lv2\ >nul
 copy /y LICENSE build\duo57.lv2\ >nul

@@ -1,5 +1,6 @@
 # Build output (build.bat / Makefile)
 /build/
+/build-cmake/
 
 # Compiler and linker by-products
 *.obj

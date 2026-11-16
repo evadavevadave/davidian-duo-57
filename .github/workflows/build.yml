@@ -1,7 +1,8 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Davidian
-# Builds and tests the plugin on Windows, Linux and macOS on every push. Pushing a
-# version tag (v*) also publishes the three ready-built bundles as a GitHub Release.
+# Builds, tests and packages the Davidian Duo '57 for Windows, macOS and Linux: LV2 and VST3
+# everywhere, and the Audio Unit on macOS. Every push and pull request gets downloadable builds;
+# a v* tag also publishes a release. Adapted from the Davidian Treble Booster 30.
 name: Build
 
 on:
@@ -15,67 +16,148 @@ permissions:
   contents: read
 
 jobs:
-  windows:
-    runs-on: windows-2022
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: windows-x64
+            os: windows-latest
+            configure: -A x64
+          - name: macos-universal
+            os: macos-latest
+            # One bundle for Apple silicon and Intel Macs, macOS 10.13 and later.
+            configure: -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" -DCMAKE_OSX_DEPLOYMENT_TARGET=10.13
+          - name: linux-x64
+            # The oldest supported runner, so the bundles run on older distributions too.
+            os: ubuntu-22.04
+          - name: linux-arm64
+            os: ubuntu-22.04-arm
     steps:
-      - uses: actions/checkout@v4
-      - name: Build and test (MSVC)
+      - uses: actions/checkout@v7
+
+      - name: Install Linux packages
+        if: runner.os == 'Linux'
+        # X11 for the GUIs, lilv for the LV2 check, and what the VST3 SDK's Linux build asks for
+        # (GTK 3 for its example hosts, which include the validator).
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libx11-dev lilv-utils lv2-dev \
+            libx11-xcb-dev libxcb-util-dev libxcb-cursor-dev libxcb-xkb-dev libxcb-keysyms1-dev \
+            libxkbcommon-dev libxkbcommon-x11-dev libfontconfig1-dev libcairo2-dev libsqlite3-dev \
+            libgtkmm-3.0-dev
+
+      - name: Configure
+        shell: bash
+        run: cmake -S . -B build-cmake -DCMAKE_BUILD_TYPE=Release ${{ matrix.configure }}
+
+      - name: Build
+        # The VST3 SDK's validator runs on the plugin as part of the build.
+        run: cmake --build build-cmake --config Release --parallel
+
+      - name: Test
+        # The DSP checks against the schematic, the panel render, the parameter table, and on
+        # Windows the VST3 host test (editor edits, and the same sound as the LV2 build).
+        run: ctest --test-dir build-cmake -C Release --output-on-failure
+
+      - name: LV2 GUI host test (MSVC build)
+        if: runner.os == 'Windows'
         shell: cmd
         run: build.bat test
+
+      - name: Check the bundles
+        shell: bash
+        run: |
+          set -e
+          B=build-cmake/duo57.lv2
+          V="build-cmake/VST3/Release/Davidian Duo 57.vst3"
+          case "$RUNNER_OS" in
+            Windows) EXT=dll; UI=WindowsUI; VBIN="x86_64-win/Davidian Duo 57.vst3" ;;
+            macOS)   EXT=dylib; UI=CocoaUI; VBIN="MacOS/Davidian Duo 57" ;;
+            Linux)   EXT=so; UI=X11UI; VBIN="$(uname -m)-linux/Davidian Duo 57.so" ;;
+          esac
+          for f in duo57.$EXT duo57_ui.$EXT manifest.ttl duo57.ttl LICENSE LICENSE-LV2; do
+            test -f "$B/$f" || { echo "missing LV2 $f"; exit 1; }
+          done
+          grep -q "ui:$UI" "$B/manifest.ttl"
+          ls -l "$B"
+          for f in "$VBIN" Resources/LICENSE Resources/LICENSE-LV2 Resources/VST3-SDK-MIT.txt; do
+            test -f "$V/Contents/$f" || { echo "missing VST3 $f"; exit 1; }
+          done
+          ls -lR "$V"
+          if [ "$RUNNER_OS" = macOS ]; then
+            lipo -info "$B/duo57.dylib" "$B/duo57_ui.dylib" "$V/Contents/$VBIN"
+            C="build-cmake/AU/Davidian Duo 57.component"
+            for f in Info.plist "MacOS/Davidian Duo 57" Resources/LICENSE Resources/LICENSE-LV2 Resources/Apache-2.0.txt; do
+              test -f "$C/Contents/$f" || { echo "missing AU $f"; exit 1; }
+            done
+            lipo -info "$C/Contents/MacOS/Davidian Duo 57"
+            codesign --verify --verbose "$C"
+            plutil -p "$C/Contents/Info.plist"
+          fi
+          if [ "$RUNNER_OS" = Linux ]; then
+            # The lilv LV2 parser, as hosts use it, on a folder holding only this bundle.
+            mkdir -p "$RUNNER_TEMP/lv2" && cp -r "$B" "$RUNNER_TEMP/lv2/"
+            LV2_PATH="$RUNNER_TEMP/lv2:/usr/lib/lv2:/usr/lib/$(uname -m)-linux-gnu/lv2" lv2info urn:davidian:duo-57 | head -30
+            objdump -T "$B/duo57.so" "$B/duo57_ui.so" "$V/Contents/$VBIN" | grep -E "GLIBC_2\.[0-9]+" -o | sort -uV | tail -1
+          fi
+
+      - name: Validate the Audio Unit with auval
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -e
+          mkdir -p ~/Library/Audio/Plug-Ins/Components
+          cp -R "build-cmake/AU/Davidian Duo 57.component" ~/Library/Audio/Plug-Ins/Components/
+          killall -9 AudioComponentRegistrar 2>/dev/null || true
+          for i in $(seq 1 15); do auval -a 2>/dev/null | grep -q "Du57 Dvdn" && break; sleep 2; done
+          auval -a | grep "Dvdn"
+          auval -strict -v aufx Du57 Dvdn
+          # The Intel half of the universal binary, through Rosetta.
+          softwareupdate --install-rosetta --agree-to-license >/dev/null 2>&1 || true
+          arch -x86_64 auval -strict -v aufx Du57 Dvdn | tail -25
+
       - name: Package
-        shell: pwsh
-        run: Compress-Archive -Path build/duo57.lv2 -DestinationPath build/duo57-windows-x64.zip
-      - uses: actions/upload-artifact@v4
-        with:
-          name: duo57-windows-x64
-          path: build/duo57-windows-x64.zip
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME}"
+          case "$GITHUB_REF" in refs/tags/*) ;; *) VERSION="dev-${GITHUB_SHA::7}" ;; esac
+          ZIP="Davidian-Duo-57-${VERSION#v}-${{ matrix.name }}.zip"
+          # Every format built for this platform, side by side at the top of the zip.
+          mkdir stage
+          cp -R build-cmake/duo57.lv2 stage/
+          cp -R "build-cmake/VST3/Release/Davidian Duo 57.vst3" stage/
+          if [ "$RUNNER_OS" = macOS ]; then cp -R "build-cmake/AU/Davidian Duo 57.component" stage/; fi
+          (cd stage && cmake -E tar cf "../$ZIP" --format=zip -- *)
+          echo "ZIP=$ZIP" >> "$GITHUB_ENV"
 
-  linux:
-    # The oldest supported runner, so the bundle runs on older glibc versions too.
-    runs-on: ubuntu-22.04
-    steps:
-      - uses: actions/checkout@v4
-      - name: Install X11 headers
-        run: sudo apt-get update && sudo apt-get install -y libx11-dev zip
-      - name: Build and test
-        run: make && make test && make dist
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
-          name: duo57-linux-x86_64
-          path: build/duo57-linux-x86_64.zip
-
-  macos:
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Build and test (universal x86_64 + arm64)
-        run: make && make test && make dist
-      - name: Check architectures
-        run: lipo -info build/duo57.lv2/duo57.dylib build/duo57.lv2/duo57_ui.dylib
-      - uses: actions/upload-artifact@v4
-        with:
-          name: duo57-macos-universal
-          path: build/duo57-macos-universal.zip
+          name: ${{ matrix.name }}
+          path: ${{ env.ZIP }}
+          if-no-files-found: error
 
   release:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [windows, linux, macos]
+    needs: build
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
         with:
           path: dist
           merge-multiple: true
-      - uses: softprops/action-gh-release@v2
-        with:
-          files: dist/*.zip
-          body: |
-            Ready-built bundles of Davidian Duo '57. Unzip and copy the `duo57.lv2` folder into your LV2 folder:
-
-            - **Windows (64-bit):** `duo57-windows-x64.zip` → `%APPDATA%\LV2`
-            - **macOS (Intel and Apple silicon):** `duo57-macos-universal.zip` → `~/Library/Audio/Plug-Ins/LV2`
-            - **Linux (x86_64):** `duo57-linux-x86_64.zip` → `~/.lv2`
-
-            The macOS bundle isn't notarized; see the README for how to let macOS load it.
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cd dist
+          sha256sum *.zip > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+          { cat ../.github/release-notes.md; echo; echo '## SHA-256'; echo; echo '```'; cat SHA256SUMS.txt; echo '```'; } > notes.md
+          gh release create "$GITHUB_REF_NAME" *.zip SHA256SUMS.txt \
+            --title "Davidian Duo '57 ${GITHUB_REF_NAME#v}" --notes-file notes.md

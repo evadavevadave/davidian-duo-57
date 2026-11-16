@@ -1143,7 +1143,27 @@ static const LV2_Descriptor descriptor = {
     extension_data
 };
 
+/* The VST3 and Audio Unit builds compile this file with DUO57_NO_LV2_ENTRY, so their
+ * libraries don't also export an LV2 entry point. */
+#ifndef DUO57_NO_LV2_ENTRY
 LV2_SYMBOL_EXPORT const LV2_Descriptor* lv2_descriptor(uint32_t index)
 {
     return index == 0 ? &descriptor : NULL;
 }
+#endif
+
+/* -------------------------------------------- engine API (VST3, AU) */
+
+/* The same plugin behind a plain C API, for the VST3 and Audio Unit builds
+ * (src/engine.h). Ports are the LV2 port numbers; the audio ports may alias. */
+#include "engine.h"
+
+DuoEngine* duo_engine_new(double sample_rate)
+{
+    return (DuoEngine*)instantiate(&descriptor, sample_rate > 0.0 ? sample_rate : 48000.0, "", NULL);
+}
+
+void duo_engine_connect(DuoEngine* e, uint32_t port, void* data) { connect_port((LV2_Handle)e, port, data); }
+void duo_engine_activate(DuoEngine* e) { activate((LV2_Handle)e); }
+void duo_engine_run(DuoEngine* e, uint32_t frames) { run((LV2_Handle)e, frames); }
+void duo_engine_free(DuoEngine* e) { if (e) cleanup((LV2_Handle)e); }

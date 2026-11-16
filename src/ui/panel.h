@@ -66,6 +66,8 @@ static const Widget WIDGETS[] = {
 #define KNOB_SPAN (0.75f * CV_PI) /* +/-135 degrees */
 
 typedef void (*PanelWrite)(void* host, int port, float value);
+/* Brackets each edit for hosts that record automation: begin = 1, then begin = 0. */
+typedef void (*PanelGesture)(void* host, int port, int begin);
 
 typedef struct {
     uint32_t* px; /* what the window shows */
@@ -77,6 +79,7 @@ typedef struct {
     int shown;     /* widget in the display, or -1 */
     int dirty;
     PanelWrite write;
+    PanelGesture gesture; /* optional; set it after panel_init */
     void* host;
 } Panel;
 
@@ -441,6 +444,20 @@ static void set_value(Panel* p, int wi, float v)
     }
 }
 
+static void gesture(Panel* p, int wi, int begin)
+{
+    if (p->gesture)
+        p->gesture(p->host, WIDGETS[wi].port, begin);
+}
+
+/* A whole edit in one go: a click on a jack or selector, a double-click reset, a wheel step. */
+static void set_once(Panel* p, int wi, float v)
+{
+    gesture(p, wi, 1);
+    set_value(p, wi, v);
+    gesture(p, wi, 0);
+}
+
 static int hit(float x, float y)
 {
     int i;
@@ -478,9 +495,10 @@ static void panel_mouse_down(Panel* p, float x, float y, int dbl)
     case W_KNOB:
     case W_TRIM:
         if (dbl) {
-            set_value(p, i, w->def);
+            set_once(p, i, w->def);
             return;
         }
+        gesture(p, i, 1);
         p->drag = i;
         p->drag_y = y;
         p->drag_norm = w_norm(w, p->val[w->port]);
@@ -488,11 +506,11 @@ static void panel_mouse_down(Panel* p, float x, float y, int dbl)
         p->dirty = 1;
         break;
     case W_SELECT:
-        set_value(p, i, floorf((y - w->y) / w->r + 0.5f));
+        set_once(p, i, floorf((y - w->y) / w->r + 0.5f));
         break;
     case W_JACK:
     case W_YBTN:
-        set_value(p, i, w->def);
+        set_once(p, i, w->def);
         break;
     }
 }
@@ -514,8 +532,10 @@ static void panel_mouse_move(Panel* p, float x, float y, int fine)
 
 static void panel_mouse_up(Panel* p)
 {
-    if (p->drag >= 0)
+    if (p->drag >= 0) {
+        gesture(p, p->drag, 0);
         p->dirty = 1;
+    }
     p->drag = -1;
 }
 
@@ -527,9 +547,9 @@ static void panel_wheel(Panel* p, float x, float y, float steps, int fine)
         return;
     w = &WIDGETS[i];
     if (w->kind == W_SELECT)
-        set_value(p, i, (float)(switch_index(p, w) + (steps > 0 ? -1 : 1)));
+        set_once(p, i, (float)(switch_index(p, w) + (steps > 0 ? -1 : 1)));
     else if (w->kind == W_KNOB || w->kind == W_TRIM)
-        set_value(p, i, w_value(w, w_norm(w, p->val[w->port]) + steps * (fine ? 0.004f : 0.025f)));
+        set_once(p, i, w_value(w, w_norm(w, p->val[w->port]) + steps * (fine ? 0.004f : 0.025f)));
 }
 
 #endif

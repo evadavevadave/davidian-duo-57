@@ -39,8 +39,9 @@ UI_CFLAGS := -O2 -Wall -Wextra $(PLAT) -fPIC -fvisibility=hidden -std=c11 -D_DEF
 LDFLAGS += $(PLAT)
 BUNDLE  := build/duo57.lv2
 LV2DIR  ?= $(HOME)/.lv2
-UI_SRC  := src/ui/ui_lv2.c src/ui/panel.h src/ui/canvas.h src/ui/font.h src/ui/style.h \
-           src/ui/window_cocoa.h src/ports.h src/lv2_core.h
+UI_C    := src/ui/ui_lv2.c src/ui/view.c
+UI_SRC  := $(UI_C) src/ui/view.h src/ui/panel.h src/ui/canvas.h src/ui/font.h src/ui/style.h \
+           src/ports.h src/lv2_core.h
 
 TARGETS := $(BUNDLE)/duo57$(LIB_EXT) $(BUNDLE)/duo57_ui$(LIB_EXT) $(BUNDLE)/manifest.ttl \
            $(BUNDLE)/duo57.ttl $(BUNDLE)/LICENSE $(BUNDLE)/LICENSE-LV2
@@ -54,7 +55,7 @@ $(BUNDLE)/duo57$(LIB_EXT): src/duo57.c src/lv2_core.h src/ports.h | $(BUNDLE)
 	$(CC) $(CFLAGS) $< -o $@ $(LDFLAGS) -lm
 
 $(BUNDLE)/duo57_ui$(LIB_EXT): $(UI_SRC) | $(BUNDLE)
-	$(CC) $(UI_CFLAGS) $(UI_LANG) $< -o $@ $(LDFLAGS) $(UI_LIBS) -lm
+	$(CC) $(UI_CFLAGS) $(UI_LANG) $(UI_C) -o $@ $(LDFLAGS) $(UI_LIBS) -lm
 
 $(BUNDLE)/manifest.ttl: duo57.lv2/manifest.ttl.in | $(BUNDLE)
 	sed -e 's/@LIB_EXT@/$(LIB_EXT)/' -e 's/@UI_CLASS@/$(UI_CLASS)/' $< > $@
