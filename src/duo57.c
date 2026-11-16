@@ -74,17 +74,28 @@ static double knob01(double k)
 }
 
 /* Audio ("A") taper: 10% resistance at mid travel (treble, bass). */
+/* Treble and bass pots (1M "A", audio): resistance fraction at the wiper for
+ * rotation p, an exponential law through TONE_TAPER_MID at half rotation. */
+#ifndef TONE_TAPER_MID
+#  define TONE_TAPER_MID 0.0865 /* fitted to TP17/TP16 at 50 % rotation */
+#endif
 static double taper_audio(double p)
 {
+    const double r = (1.0 - TONE_TAPER_MID) / TONE_TAPER_MID, b = r * r;
     p = clampd(p, 0.0, 1.0);
-    return (pow(81.0, p) - 1.0) / 80.0;
+    return (pow(b, p) - 1.0) / (b - 1.0);
 }
 
-/* Volume pots ("SPL. D"): the schematic test-point levels (TP14 -> TP15 at 50%
- * rotation) are reproduced with a linear law, so that is what is used. */
+/* Volume pots ("SPL. D", a special taper the schematic does not define): a law just
+ * under linear, set by the schematic test-point ratio TP15/TP14 at 50 % rotation. */
+#ifndef VOL_TAPER_MID
+#  define VOL_TAPER_MID 0.47 /* fitted to TP15/TP14 at 50 % rotation */
+#endif
 static double taper_volume(double p)
 {
-    return clampd(p, 0.0, 1.0);
+    const double r = (1.0 - VOL_TAPER_MID) / VOL_TAPER_MID, b = r * r;
+    p = clampd(p, 0.0, 1.0);
+    return fabs(b - 1.0) < 1e-9 ? p : (pow(b, p) - 1.0) / (b - 1.0);
 }
 
 /* ---------------------------------------------------- TPT one-pole filter */
@@ -533,7 +544,13 @@ static inline double tonestack_run(ToneStack* ts, double u)
 #define PA_VCO      63.0    /* grid cutoff distance at 455 V screens       */
 #define PA_K        0.727e-3/* A / V^1.5 -> 33.3 mA at idle                */
 #define PA_RL       53.7    /* speaker volts per amp of (Ia - Ib)          */
-#define PA_VSAT     21.0    /* speaker voltage where the plates bottom out */
+#ifndef PA_VSAT
+#  define PA_VSAT   20.7    /* speaker voltage where the plates bottom out */
+#endif
+#ifndef PA_KNEE
+#  define PA_KNEE   4.0     /* knee hardness; with PA_VSAT, fitted to the
+                                 * schematic output test: 30 W at 5 % THD     */
+#endif
 #define PA_B0       475.0   /* unloaded B+                                  */
 #define PA_RSAG     300.0   /* rectifier + transformer resistance           */
 #define PA_BNOM     455.0
@@ -593,8 +610,11 @@ static inline double power_h(PowerAmp* p, double w)
 
     p->ia = pentode_i(p->na, s);
     p->ib = pentode_i(p->nb, s);
+    /* Plates bottoming out: a limiter that stays linear until near PA_VSAT, with
+     * knee hardness PA_KNEE (n = 2 is about as soft as tanh). */
     double vsat = PA_VSAT * s;
-    return vsat * tanh((p->ia - p->ib) * PA_RL / vsat);
+    double x = (p->ia - p->ib) * PA_RL / vsat;
+    return vsat * x / pow(1.0 + pow(fabs(x), PA_KNEE), 1.0 / PA_KNEE);
 }
 
 static void power_set_presence(PowerAmp* p, double pres, double fs)
