@@ -1,6 +1,6 @@
 # Davidian Duo '57
 
-A circuit-modelled guitar amplifier plugin (LV2), solved stage by stage from the service diagram of a classic 1957 tweed 2x12 combo: four input jacks on Normal and Bright channels, a treble/bass tone stack, presence, a 6L6GC push-pull power amp with rectifier sag, and five speaker cabinet models.
+A circuit-modelled guitar amplifier plugin (LV2, VST3 and Audio Unit), solved stage by stage from the service diagram of a classic 1957 tweed 2x12 combo: four input jacks on Normal and Bright channels, a treble/bass tone stack, presence, a 6L6GC push-pull power amp with rectifier sag, and five speaker cabinet models.
 
 **A close model, not an exact copy.** It is a simulation of the circuit from its component values, not a sampled or measured amp, and some details are reasoned estimates (listed under [Estimates](#estimates)). It has not been compared side by side with a built unit, so expect it to sound close to the hardware rather than identical.
 
@@ -11,32 +11,51 @@ A mono amp with no latency (mono or stereo tracks work too), with the same GUI o
 | Format | Windows | macOS | Linux |
 |---|---|---|---|
 | LV2 | yes | yes | yes |
+| VST3 | yes | yes | yes |
+| Audio Unit | — | yes | — |
+
+Every format runs the same amp code and the same panel. The VST3 is checked sample for sample against the LV2 build.
 
 ## Download
 
-Ready-made builds are on the [Releases page](https://github.com/evadavevadave/davidian-duo-57/releases). Each zip holds one `duo57.lv2` folder with the plugin, its GUI, the two .ttl files and the licences:
+Ready-made builds are on the [Releases page](https://github.com/evadavevadave/davidian-duo-57/releases). Each zip holds every format for one system, side by side, each with its licences:
 
 | Download | Contains | For |
 |---|---|---|
-| `duo57-windows-x64.zip` | LV2 (Win32 GUI) | Windows 10/11, 64-bit hosts |
-| `duo57-macos-universal.zip` | LV2 (Cocoa GUI) | macOS 10.13 or later, Apple silicon and Intel |
-| `duo57-linux-x86_64.zip` | LV2 (X11 GUI) | 64-bit Intel/AMD Linux |
+| `Davidian-Duo-57-<version>-windows-x64.zip` | LV2 and VST3 (Win32 GUI) | Windows 10/11, 64-bit hosts |
+| `Davidian-Duo-57-<version>-macos-universal.zip` | LV2, VST3 and Audio Unit (Cocoa GUI) | macOS 10.13 or later, Apple silicon and Intel |
+| `Davidian-Duo-57-<version>-linux-x64.zip` | LV2 and VST3 (X11 GUI) | 64-bit Intel/AMD Linux |
+| `Davidian-Duo-57-<version>-linux-arm64.zip` | LV2 and VST3 (X11 GUI) | 64-bit ARM Linux |
 
-Unzip, copy the plugin folder into your LV2 folder, and restart your host (or rescan plugins):
+`SHA256SUMS.txt` on the release page lists each zip's checksum. Unzip, copy the format your host uses into its plugin folder, and restart your host (or rescan plugins):
 
 | Format | Copy | Into |
 |---|---|---|
 | LV2 (Windows) | `duo57.lv2` | `%APPDATA%\LV2` (create it if it doesn't exist) |
 | LV2 (macOS) | `duo57.lv2` | `~/Library/Audio/Plug-Ins/LV2` |
 | LV2 (Linux) | `duo57.lv2` | `~/.lv2` |
+| VST3 (Windows) | `Davidian Duo 57.vst3` | `C:\Program Files\Common Files\VST3` |
+| VST3 (macOS) | `Davidian Duo 57.vst3` | `~/Library/Audio/Plug-Ins/VST3` |
+| VST3 (Linux) | `Davidian Duo 57.vst3` | `~/.vst3` |
+| Audio Unit (macOS) | `Davidian Duo 57.component` | `~/Library/Audio/Plug-Ins/Components` |
 
-In the host it is listed as **Davidian Duo '57**. Replace any older copy instead of keeping two: when two bundles have the same URI, the loader uses one and ignores the other. If your host doesn't scan that folder, add it to the host's LV2 search path or set the `LV2_PATH` environment variable. The LV2 URI is `urn:davidian:duo-57`.
+In the host it is listed as **Davidian Duo '57** (LV2), **Duo '57** by Davidian (VST3) or **Davidian: Duo '57** (Audio Unit). Replace any older copy instead of keeping two: when two bundles have the same URI, the loader uses one and ignores the other. If your host doesn't scan the LV2 folder, add it to the host's LV2 search path or set the `LV2_PATH` environment variable. The LV2 URI is `urn:davidian:duo-57`; the Audio Unit is `aufx Du57 Dvdn`.
 
-The macOS build isn't notarized, so macOS may block it after download. Run this once in Terminal after copying:
+The macOS builds are ad hoc signed but not notarized, so macOS may block them after download. Run this once in Terminal for each format you copied:
 
 ```bash
 xattr -dr com.apple.quarantine ~/Library/Audio/Plug-Ins/LV2/duo57.lv2
 ```
+
+```bash
+xattr -dr com.apple.quarantine "$HOME/Library/Audio/Plug-Ins/VST3/Davidian Duo 57.vst3"
+```
+
+```bash
+xattr -dr com.apple.quarantine "$HOME/Library/Audio/Plug-Ins/Components/Davidian Duo 57.component"
+```
+
+The VST3 and Audio Unit have their own bypass, which fades over 10 ms (VST3) or passes the input straight through (Audio Unit).
 
 ## Controls
 
@@ -85,27 +104,41 @@ All in `src/duo57.c`, with the service diagram's part values.
 
 ### Checked against the schematic
 
-Note 6 of the schematic gives AC test-point voltages for 10 mV at 1 kHz into J3 (Bright 1), with all controls at 50%. The schematic allows ±20%. `render` prints the model's value at each point.
+The schematic prints DC voltages at four test points, AC levels at six more, and an output test. `render` checks all of them on every build.
+
+**DC operating points** (from the valve models and the circuit's resistors; nothing is fitted to these):
 
 | Point | Model | Schematic | Difference |
 |---|---|---|---|
-| TP14 (C3 node) | 554 mV | 488 mV | +14% |
-| TP15 (V3-A grid) | 60 mV | 50 mV | +20% |
-| TP16 (cathode follower) | 3.09 V | 2.51 V | +23% |
-| TP17 (V4-A grid) | 371 mV | 261 mV | +42% |
-| TP23 (speaker, 4 Ω) | 3.76 V | 2.6 V | +45% |
-| Power at full clipping | 36 W | 30 W RMS at 5% THD | — |
+| TP8 (input cathodes) | 1.64 V | 1.73 V | −5% |
+| TP9 (V3-A cathode) | 1.47 V | 1.55 V | −5% |
+| TP10 (cathode follower) | 204 V | 197 V | +3% |
+| TP11 (V4-A cathode) | 1.79 V | 1.93 V | −7% |
 
-The input stages are within the schematic's tolerance. From TP16 on the model runs hot: TP17 and TP23 are 3 dB above the schematic. The power figures aren't like for like: the model's 36 W is at full clipping, not at 5% THD.
+**AC test points** (note 6: 10 mV at 1 kHz into J3, Bright 1, with all controls at 50%; the schematic allows ±20%):
+
+| Point | Model | Schematic | Difference |
+|---|---|---|---|
+| TP14 (C3 node) | 554 mV | 488 mV | +13% |
+| TP15 (V3-A grid) | 57 mV | 50 mV | +13% |
+| TP16 (cathode follower) | 2.92 V | 2.51 V | +16% |
+| TP17 (V4-A grid) | 302 mV | 261 mV | +16% |
+| TP23 (speaker, 4 Ω) | 3.23 V | 2.6 V | +24% |
+
+**Output test:** the model gives 30.1 W at 5% THD into 4 Ω; the schematic calls for 30 W RMS. At full clipping it gives 43 W. The schematic gives no figure for that; Fender quotes 40 W for its later '57 Custom Twin.
+
+The ratio across each stage matches the schematic. The +13% at the input carries through the whole chain. That comes from the 12AX7 model (Koren's published parameters), not from an estimate, so it is left as it is: a real valve's gain varies by more than that. Only the speaker test point ends up just outside the schematic's ±20%.
 
 ### Estimates
 
-The schematic doesn't settle these, so they are reasoned estimates:
+Each estimate was checked against the schematic, its parts list and published sources (see [Sources](#sources)), and changed where the schematic's own data settled it:
 
-- **Jack switching:** the scan's jack drawing alone suggests that Input 1 drives only one triode. But a single 12AX7 cannot reach the TP14 gain of 48.8× with this load. With both triodes driven, the model gives about 55×. So Input 1 is modelled as driving both triodes, and Input 2 as driving one, with the other grid grounded.
-- **Volume taper:** the volume pots are marked "SPL. D", which doesn't say what law they follow. A linear law reproduces the TP14 → TP15 ratio at 50% rotation, so that is what is used. Treble and bass use a standard audio taper.
-- **Power-amp constants:** the 6L6GC curve, output-transformer saturation and sag depth.
-- **Cabinet filters:** all five are shaped by ear from the usual character of each cabinet type, not from measured speakers or impulse responses. Their curves are in the `CABS` table in `src/duo57.c`.
+- **Input valves (confirmed):** all four input triodes are 12AX7s. The parts list gives four 7025/12AX7WA valves. Some retailers list 12AY7s, but that is the later '57 Custom Twin, a different amp.
+- **Jack switching (confirmed):** Input 1 drives both triodes of its channel in parallel, and Input 2 drives one. The scan's jack drawing is ambiguous, but builders' reports of the 5E8-A agree, and only two parallel 12AX7s reach the schematic's TP14 gain of 48.8×. Input 1 is about 6 dB hotter.
+- **Volume pots (fitted):** the parts list calls them "1M SPL D", a special taper the schematic doesn't define, and no published curve was found. The law is now set so the volume stage's loss (TP15/TP14) matches the schematic exactly. It sits at 47% of the resistance at half rotation, just under linear (it was linear before).
+- **Treble and bass pots (fitted):** "1M A" audio pots. The audio curve is now set so the tone stack's loss (TP17/TP16) matches the schematic. It sits at 8.65% at half rotation (it was 10%, which left TP17 42% high). The stack's loss is very sensitive to this curve, and 8.65% is within the tolerance of real audio pots.
+- **Power stage (fitted):** the plate saturation now has a harder knee, fitted to the schematic's output test of 30 W RMS at 5% THD. With the old, softer curve the model reached 5% THD at about 22 W.
+- **Cabinet filters (estimate):** all five are shaped by ear from the usual character of each cabinet type, not from measured speakers or impulse responses. Their curves are in the `CABS` table in `src/duo57.c`. The stock cabinet stands in for the amp's two 8 Ω 12" alnico speakers.
 
 ### Simplifications
 
@@ -121,20 +154,43 @@ Power-supply ripple isn't modelled, and the preamp supply doesn't sag with the p
 
 ## Build
 
-The code is plain C (Objective-C for the macOS window layer) with no dependencies beyond the platform's own libraries: Win32 on Windows, Cocoa on macOS, Xlib on Linux. No LV2 SDK is needed; build with `-DHAVE_LV2` to use the system headers instead.
+The amp and the LV2 plugin are plain C, with no dependencies beyond the platform's own libraries: Win32 on Windows, Cocoa on macOS, Xlib on Linux. The macOS window layer is compiled as Objective-C. No LV2 SDK is needed; build with `-DHAVE_LV2` to use the system headers instead. The VST3 and Audio Unit wrappers are C++ on the Steinberg VST3 SDK and Apple's AudioUnitSDK, which CMake downloads while configuring.
 
 | Source | What it is |
 |---|---|
-| `src/duo57.c` | The amp model, cabinet models and LV2 entry points |
-| `src/ports.h` | Port numbers, cabinet numbers and URIs shared by the plugin and the GUI |
-| `src/ui/ui_lv2.c` | LV2 GUI entry points and the Win32 and X11 window layers |
-| `src/ui/window_cocoa.h` | The macOS (Cocoa) window layer |
+| `src/duo57.c` | The amp model, cabinet models, LV2 entry points and the engine API |
+| `src/engine.h` | The amp as a small C API, for the VST3 and Audio Unit wrappers |
+| `src/params.h` | The VST3 and Audio Unit parameters: ranges, defaults and names, as in the TTL |
+| `src/ports.h` | Port numbers, cabinet numbers and URIs shared by every format and the GUI |
+| `src/vst3/` | The VST3 plugin: processor, controller and editor |
+| `src/au/` | The Audio Unit: the AUv2 effect, its Cocoa view and its Info.plist |
+| `src/ui/ui_lv2.c` | LV2 GUI entry points |
+| `src/ui/view.c`, `view.h` | The panel in a native window: Win32, Cocoa or X11. Shared by the LV2 GUI, the VST3 editor and the Audio Unit view |
 | `src/ui/panel.h` | The panel: layout, drawing and mouse handling, with no platform code |
 | `src/ui/style.h`, `canvas.h`, `font.h` | Davidian GUI house style: palette, software renderer and stroke font, copied unchanged from the Bi-Lumen |
 | `src/lv2_core.h` | The LV2 C interface, so no SDK is needed |
 | `duo57.lv2/` | LV2 metadata. The build fills in the library extension and GUI type in `manifest.ttl.in` |
+| `CMakeLists.txt` | Builds every format, with the tests |
 
-### Windows (Visual Studio)
+### Every format (CMake)
+
+Needs CMake 3.25 or later, a C and C++ compiler, and git (to download the SDKs). On Linux, also the X11 and XCB headers that the VST3 SDK asks for; the CI workflow lists them. On macOS, the Xcode command-line tools.
+
+```bash
+cmake -S . -B build-cmake -DCMAKE_BUILD_TYPE=Release
+```
+
+```bash
+cmake --build build-cmake --config Release
+```
+
+```bash
+ctest --test-dir build-cmake -C Release
+```
+
+This builds `build-cmake/duo57.lv2`, `build-cmake/VST3/Release/Davidian Duo 57.vst3` and, on macOS, `build-cmake/AU/Davidian Duo 57.component`. For a universal macOS build, add `-DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"`. To skip a format, add `-DDUO_VST3=OFF` or `-DDUO_AU=OFF`. Visual Studio ships a copy of CMake, and the VST3 SDK's validator runs on the plugin after every build.
+
+### LV2 only, Windows (Visual Studio)
 
 Needs Visual Studio with the C++ tools. `build.bat` finds them with `vswhere`, and builds `build\duo57.lv2`.
 
@@ -142,7 +198,7 @@ Needs Visual Studio with the C++ tools. `build.bat` finds them with `vswhere`, a
 build.bat
 ```
 
-### macOS, Linux, MinGW
+### LV2 only, macOS, Linux, MinGW
 
 Needs a C compiler and `make`. On Linux, also the X11 headers (`libx11-dev` on Debian/Ubuntu). On macOS, the Xcode command-line tools; the build is universal (Apple silicon and Intel) by default, and `make ARCH=` builds for this Mac's architecture only. The libraries get the right name for each system (`.so` or `.dylib`).
 
@@ -170,11 +226,17 @@ macOS, Linux:
 make test
 ```
 
-- `render` checks the plugin against the schematic's test-point voltages and its rated power. It renders a synthetic chord through five settings and through each cabinet to `build\test_*.wav`, checks that the cabinets are level-matched, and checks for NaN, glitches when switching input jacks or cabinets, and stability of the feedback loops. A single instance runs about 7–9 times faster than real time on the build machine.
+With CMake, `ctest` runs `render`, `ui_render`, `params_check` and (on Windows) `vst3_check`.
+
+- `render` checks the plugin against the schematic: the AC test-point levels, the two fitted stage ratios, the four DC operating points and the 5% THD output test. It renders a synthetic chord through five settings and through each cabinet to `build\test_*.wav`, checks that the cabinets are level-matched, and checks for NaN, glitches when switching input jacks or cabinets, and stability of the feedback loops. A single instance runs about 7–9 times faster than real time on the build machine.
 - `ui_render` draws the panel to a BMP file: `build\ui_render.exe panel.bmp`.
 - `ui_check` (Windows) loads the GUI the way a Windows host does and drives it with mouse messages: `build\ui_check.exe duo57.lv2 window.bmp`.
+- `params_check` checks that the VST3 and Audio Unit parameters in `src/params.h` agree with the TTL and the panel, and that values round-trip through the host's 0–1 range and through text.
+- `vst3_check` (Windows) loads the VST3 the way a host does. It drives the editor with mouse messages and checks that each click or drag reaches the host as one begin/perform/end edit. It also checks that the VST3 output matches the LV2 build sample for sample (it measures a difference of 0), and that bypass passes the input through.
+- The Steinberg VST3 SDK's validator runs on the VST3 after every build (47 tests).
+- In CI on macOS, Apple's `auval -strict` validates the Audio Unit, natively and through Rosetta for the Intel half.
 
-GitHub Actions builds and tests on Windows (MSVC), Ubuntu 22.04 and the current macOS for every push (see `.github/workflows/build.yml`). The macOS and Linux GUIs are checked by compiling them and rendering the shared panel code, not by opening a window. Pushing a version tag publishes a release with a zip for each system.
+GitHub Actions builds and tests on Windows (MSVC), the current macOS, and Ubuntu 22.04 on x64 and ARM for every push (see `.github/workflows/build.yml`). On Linux it also checks the LV2 bundle with the lilv parser that hosts use. The macOS and Linux GUIs are checked by compiling them and rendering the shared panel code, not by opening a window. Pushing a version tag publishes a release with a zip for each system.
 
 ## Use of AI
 
@@ -183,16 +245,18 @@ Made with generative AI (Claude Code, Anthropic's Claude Opus 5.5), directed and
 - **The author** supplied the schematic, the GUI house style, the names and the licensing choices. They also decided what to build and changed parts of the result themselves, including renaming the project to Duo '57.
 - **The AI**:
   - read component values and topology from the scanned schematic and chose the estimates listed under [Estimates](#estimates)
+  - checked those estimates against the schematic's parts list and test points and against published sources, and fitted the pot curves and power stage to the schematic's data
   - wrote the DSP model and calibrated it against the schematic's test points
   - designed the five cabinet curves
-  - adapted the house-style GUI to this panel and wrote the macOS window layer
+  - adapted the house-style GUI to this panel, and the VST3 and Audio Unit wrappers from the Davidian Treble Booster 30
   - wrote the test programs, the build scripts and CI workflow, and the documentation
 - **Checking:** the results are checked by the automated tests described above:
-  - test-point levels and power against the schematic
+  - DC operating points, test-point levels and the output test against the schematic
   - numerical stability, jack and cabinet switching, cabinet levels and speed
-  - the GUI loaded and driven by simulated mouse input (Windows)
-  - builds and DSP tests on Windows, macOS and Linux in CI
-- **Not checked:** the sound hasn't been compared with a real amplifier, and the plugin hasn't been tried in a host yet. The macOS and Linux GUIs compile but haven't been opened in a host. The values under [Estimates](#estimates) should be tuned by ear.
+  - the GUI loaded and driven by simulated mouse input (Windows: LV2 and VST3)
+  - the VST3 against the LV2 build, sample for sample; Steinberg's validator; `auval` for the Audio Unit
+  - builds and tests on Windows, macOS and Linux in CI
+- **Not checked:** the sound hasn't been compared with a real amplifier, and the plugin hasn't been tried in a DAW yet. The macOS and Linux GUIs compile but haven't been opened in a host. The cabinet curves should be tuned by ear.
 
 ## References
 
@@ -202,6 +266,15 @@ The model re-implements equations from these published works. No code was copied
 - R. Bristow-Johnson, "Cookbook formulae for audio EQ biquad filter coefficients" (the Audio EQ Cookbook). The low-pass, high-pass and peaking filters in the anti-alias and cabinet filters.
 - V. Zavalishin, *The Art of VA Filter Design*, Native Instruments, 2012–2020. The topology-preserving one-pole filters.
 - K. Karplus and A. Strong, "Digital synthesis of plucked-string and drum timbres", *Computer Music Journal* 7(2), 1983. Only used to make the test signal in `test/render.c`.
+
+### Sources
+
+Consulted when checking the [Estimates](#estimates). They are builders' and sellers' accounts, not manufacturer data, and the schematic's own data took precedence:
+
+- [TDPRI: Tweed amps – 1 vs 2 input tubes for the standard 2-channel, 4-input circuits](https://www.tdpri.com/threads/tweed-amps-1-vs-2-input-tubes-for-fenders-standard-2-channel-4-input-circuits.592490/) and [Help with input jack wiring on 5e8a build](https://www.tdpri.com/threads/help-with-input-jack-wiring-on-5e8a-build.566285/): which input drives both triodes
+- [Music Electronics Forum: tweed twin 5e8a parallel triodes](https://music-electronics-forum.com/forum/amplification/guitar-amps/theory-design/19802-tweed-twin-5e8a-parallel-triodes): the shared 470 Ω input cathode resistor
+- [Music Electronics Forum: 5E8-A weird tone stack](https://music-electronics-forum.com/forum/amplification/guitar-amps/build-your-amp/tweed-builders/15351-5e8-a-wierd-tone-stack): pot tapers in the 5E8-A
+- [Premier Guitar review of the '57 Custom Twin-Amp](https://www.premierguitar.com/fender-custom-57-twin-amp-review): the later reissue's valves and output, a different amp
 
 ## Licence
 
@@ -213,8 +286,13 @@ Copyright (C) 2026 Davidian. GPL-3.0-or-later: you can redistribute it and/or mo
 |---|---|---|
 | LV2 C interface (`lv2/core/lv2.h`, `lv2/ui/ui.h`) | ISC | Its declarations are re-stated in `src/lv2_core.h`, the UI ABI block of `src/ui/ui_lv2.c` and `test/ui_check.c`, so no LV2 SDK is needed. Copyright and permission notice in [LICENSE-LV2](LICENSE-LV2). |
 | LV2 vocabularies (`lv2core`, `ui`, `units`) | ISC | The `.ttl` files refer to them by URI. Nothing is copied. |
-| Microsoft C runtime | Visual Studio licence | `build.bat` links it statically (`/MT`) into the DLLs you build. It counts as a system library under the GPL, so this is allowed. No binaries are committed to this repository. |
-| Apple Cocoa, Core Graphics; X11 (libX11) | System libraries | The macOS and Linux GUIs link them dynamically. Nothing is copied. |
-| GitHub Actions (`actions/checkout`, `upload-artifact`, `download-artifact`, `softprops/action-gh-release`) | MIT | Used only by the CI workflow to build and publish releases. Not part of the plugin. |
+| Steinberg VST3 SDK 3.8.1 (`base`, `pluginterfaces`, `public.sdk`) | MIT | Compiled into `Davidian Duo 57.vst3`; the tests also use its hosting classes and validator. CMake downloads it while configuring; it is not stored in this repository. Licence text in [licenses/VST3-SDK-MIT.txt](licenses/VST3-SDK-MIT.txt), copied into the VST3 bundle's `Contents/Resources`. |
+| Apple AudioUnitSDK 1.2.0 (AUBase, AUEffectBase and their helpers, unmodified) | Apache 2.0 | Compiled into `Davidian Duo 57.component`. CMake downloads it while configuring; it is not stored in this repository. Licence text in [licenses/Apache-2.0.txt](licenses/Apache-2.0.txt), copied into the component's `Contents/Resources`. The SDK has no NOTICE file. |
+| Microsoft C and C++ runtimes | Visual Studio licence | Linked statically (`/MT`) into the Windows DLLs and the VST3. They count as system libraries under the GPL, so this is allowed. No binaries are committed to this repository. |
+| Apple Cocoa, Core Graphics, AudioToolbox, AudioUnit, CoreAudio; X11 (libX11) | System libraries | The macOS and Linux builds link them dynamically. Nothing is copied. |
+| lilv | ISC | Only the CI's Linux check runs Ubuntu's `lv2info` on the bundle. Not part of the plugin. |
+| GitHub Actions (`actions/checkout`, `upload-artifact`, `download-artifact`) | MIT | Used only by the CI workflow to build and publish releases. Not part of the plugin. |
+
+MIT and Apache 2.0 are both compatible with GPL version 3, so the VST3 plugin and the Audio Unit are distributed under GPL-3.0-or-later as combined works.
 
 This project is not affiliated with or endorsed by the maker of the original amplifier. Valve type numbers (12AX7, 6L6GC, 5U4) are generic industry designations.

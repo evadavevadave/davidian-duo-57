@@ -173,7 +173,7 @@ int main(void)
         double vclip = sqrt(sum / n) / 0.035;
         int ok = w5 > 25.5 && w5 < 34.5;
         printf("Output test: %.1f W at 5%% THD into 4 ohm (schematic: 30 W)  %s\n", w5, ok ? "ok" : "OFF SPEC");
-        printf("Full clipping: %.1f W (rated 40 W)\n", vclip * vclip / 4.0);
+        printf("Full clipping: %.1f W\n", vclip * vclip / 4.0);
         if (!ok) fail = 1;
         d->cleanup(h);
     }
